@@ -1,0 +1,493 @@
+---
+title: "R Performance Analysis Dashboard"
+author: "Kamil Nazaruk"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: darkly
+    toc: true
+    toc_float: true
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 6
+)
+
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(DT)
+library(knitr)
+library(scales)
+```
+
+```{css, echo=FALSE}
+body {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+.main-container {
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+h1, h2, h3, h4 {
+  color: #38bdf8;
+}
+
+.card {
+  background-color: #1e293b;
+  border-left: 4px solid #38bdf8;
+  padding: 15px;
+  margin: 15px 0;
+  border-radius: 5px;
+}
+
+.metric-box {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  border: 1px solid #38bdf8;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  margin: 10px;
+}
+
+.metric-value {
+  font-size: 2em;
+  font-weight: bold;
+  color: #38bdf8;
+}
+
+.metric-label {
+  font-size: 0.9em;
+  color: #94a3b8;
+  margin-top: 5px;
+}
+```
+
+<div class="card">
+<h1>📊 R Performance Analysis Dashboard</h1>
+<p><strong>Real-time operational performance monitoring and analysis</strong></p>
+<p>This interactive report analyzes system performance metrics including response times, throughput, error rates, and resource utilization.</p>
+</div>
+
+```{r generate_data, include=FALSE}
+# Generate sample performance data
+set.seed(42)
+n_records <- 1000
+
+performance_data <- data.frame(
+  timestamp = seq(from = as.POSIXct("2024-01-01 00:00:00"),
+                  by = "hour",
+                  length.out = n_records),
+  operation_id = paste0("OP", sprintf("%04d", 1:n_records)),
+  response_time_ms = rlnorm(n_records, meanlog = 4.5, sdlog = 0.8),
+  throughput_ops = rpois(n_records, lambda = 450),
+  error_rate = rbeta(n_records, shape1 = 1, shape2 = 50),
+  cpu_usage = rbeta(n_records, shape1 = 5, shape2 = 3),
+  memory_usage_mb = rnorm(n_records, mean = 2048, sd = 512),
+  success_rate = rbeta(n_records, shape1 = 95, shape2 = 5),
+  latency_p95_ms = rlnorm(n_records, meanlog = 5.2, sdlog = 0.6),
+  concurrent_users = rpois(n_records, lambda = 75)
+)
+
+# Add some anomalies (10% of data)
+anomaly_indices <- sample(1:n_records, size = n_records * 0.10)
+performance_data$response_time_ms[anomaly_indices] <-
+  performance_data$response_time_ms[anomaly_indices] * runif(length(anomaly_indices), 3, 8)
+performance_data$error_rate[anomaly_indices] <-
+  performance_data$error_rate[anomaly_indices] + runif(length(anomaly_indices), 0.1, 0.3)
+
+# Add derived columns
+performance_data$hour <- as.POSIXlt(performance_data$timestamp)$hour
+performance_data$day <- as.Date(performance_data$timestamp)
+performance_data$is_anomaly <- 1:n_records %in% anomaly_indices
+```
+
+## Executive Summary
+
+```{r summary_metrics, echo=FALSE}
+# Calculate summary statistics
+avg_response_time <- mean(performance_data$response_time_ms)
+avg_throughput <- mean(performance_data$throughput_ops)
+avg_error_rate <- mean(performance_data$error_rate) * 100
+avg_cpu <- mean(performance_data$cpu_usage) * 100
+anomaly_count <- sum(performance_data$is_anomaly)
+anomaly_pct <- (anomaly_count / n_records) * 100
+```
+
+<div style="display: flex; flex-wrap: wrap; justify-content: space-around;">
+  <div class="metric-box">
+    <div class="metric-value">`r format(round(avg_response_time, 1), big.mark=",")`ms</div>
+    <div class="metric-label">Avg Response Time</div>
+  </div>
+  <div class="metric-box">
+    <div class="metric-value">`r format(round(avg_throughput, 0), big.mark=",")`</div>
+    <div class="metric-label">Avg Throughput (ops/sec)</div>
+  </div>
+  <div class="metric-box">
+    <div class="metric-value">`r sprintf("%.2f%%", avg_error_rate)`</div>
+    <div class="metric-label">Avg Error Rate</div>
+  </div>
+  <div class="metric-box">
+    <div class="metric-value">`r sprintf("%.1f%%", avg_cpu)`</div>
+    <div class="metric-label">Avg CPU Usage</div>
+  </div>
+  <div class="metric-box">
+    <div class="metric-value">`r anomaly_count`</div>
+    <div class="metric-label">Anomalies Detected (`r sprintf("%.1f%%", anomaly_pct)`)</div>
+  </div>
+</div>
+
+---
+
+## Performance Trends Over Time
+
+### Response Time Analysis
+
+```{r response_time_trend, echo=FALSE}
+# Daily aggregation
+daily_stats <- performance_data %>%
+  group_by(day) %>%
+  summarise(
+    avg_response = mean(response_time_ms),
+    p50_response = median(response_time_ms),
+    p95_response = quantile(response_time_ms, 0.95),
+    p99_response = quantile(response_time_ms, 0.99)
+  )
+
+# Create interactive plot
+p <- plot_ly(daily_stats) %>%
+  add_trace(x = ~day, y = ~avg_response, type = 'scatter', mode = 'lines+markers',
+            name = 'Average', line = list(color = '#38bdf8', width = 3)) %>%
+  add_trace(x = ~day, y = ~p95_response, type = 'scatter', mode = 'lines',
+            name = 'P95', line = list(color = '#f59e0b', dash = 'dash')) %>%
+  add_trace(x = ~day, y = ~p99_response, type = 'scatter', mode = 'lines',
+            name = 'P99', line = list(color = '#ef4444', dash = 'dot')) %>%
+  layout(
+    title = "Response Time Trends",
+    xaxis = list(title = "Date", color = '#f1f5f9'),
+    yaxis = list(title = "Response Time (ms)", color = '#f1f5f9'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9'),
+    hovermode = 'x unified'
+  )
+
+p
+```
+
+### Throughput and Error Rate
+
+```{r throughput_errors, echo=FALSE, fig.height=5}
+daily_perf <- performance_data %>%
+  group_by(day) %>%
+  summarise(
+    avg_throughput = mean(throughput_ops),
+    avg_error_rate = mean(error_rate) * 100
+  )
+
+# Throughput plot
+p1 <- plot_ly(daily_perf) %>%
+  add_trace(x = ~day, y = ~avg_throughput, type = 'bar',
+            name = 'Throughput', marker = list(color = '#3b82f6')) %>%
+  layout(
+    title = "Average Throughput (ops/sec)",
+    xaxis = list(title = "Date", color = '#f1f5f9'),
+    yaxis = list(title = "Operations/sec", color = '#f1f5f9'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9')
+  )
+
+# Error rate plot
+p2 <- plot_ly(daily_perf) %>%
+  add_trace(x = ~day, y = ~avg_error_rate, type = 'scatter', mode = 'lines+markers',
+            name = 'Error Rate', line = list(color = '#ef4444', width = 3),
+            marker = list(size = 8)) %>%
+  layout(
+    title = "Average Error Rate (%)",
+    xaxis = list(title = "Date", color = '#f1f5f9'),
+    yaxis = list(title = "Error Rate (%)", color = '#f1f5f9'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9')
+  )
+
+subplot(p1, p2, nrows = 2, shareX = TRUE)
+```
+
+---
+
+## Resource Utilization
+
+### CPU and Memory Usage
+
+```{r resource_usage, echo=FALSE}
+# CPU usage over time
+p_cpu <- plot_ly(performance_data) %>%
+  add_trace(x = ~timestamp, y = ~cpu_usage * 100, type = 'scatter', mode = 'lines',
+            name = 'CPU Usage', line = list(color = '#8b5cf6'),
+            fill = 'tozeroy', fillcolor = 'rgba(139, 92, 246, 0.3)') %>%
+  layout(
+    title = "CPU Usage Over Time",
+    xaxis = list(title = "Timestamp", color = '#f1f5f9'),
+    yaxis = list(title = "CPU Usage (%)", color = '#f1f5f9', range = c(0, 100)),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9')
+  )
+
+# Memory usage distribution
+p_mem <- plot_ly(performance_data, x = ~memory_usage_mb, type = 'histogram',
+                 marker = list(color = '#06b6d4')) %>%
+  layout(
+    title = "Memory Usage Distribution",
+    xaxis = list(title = "Memory Usage (MB)", color = '#f1f5f9'),
+    yaxis = list(title = "Frequency", color = '#f1f5f9'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9')
+  )
+
+subplot(p_cpu, p_mem, nrows = 1)
+```
+
+---
+
+## Hourly Performance Patterns
+
+```{r hourly_patterns, echo=FALSE}
+hourly_stats <- performance_data %>%
+  group_by(hour) %>%
+  summarise(
+    avg_response_time = mean(response_time_ms),
+    avg_throughput = mean(throughput_ops),
+    avg_error_rate = mean(error_rate) * 100,
+    n_operations = n()
+  )
+
+# Heatmap style visualization
+p <- plot_ly(hourly_stats) %>%
+  add_trace(x = ~hour, y = ~avg_response_time, type = 'bar',
+            name = 'Response Time (ms)', yaxis = 'y', marker = list(color = '#38bdf8')) %>%
+  add_trace(x = ~hour, y = ~avg_error_rate, type = 'scatter', mode = 'lines+markers',
+            name = 'Error Rate (%)', yaxis = 'y2', line = list(color = '#ef4444', width = 3),
+            marker = list(size = 8)) %>%
+  layout(
+    title = "Hourly Performance Patterns",
+    xaxis = list(title = "Hour of Day (0-23)", color = '#f1f5f9'),
+    yaxis = list(title = "Response Time (ms)", color = '#38bdf8'),
+    yaxis2 = list(title = "Error Rate (%)", overlaying = 'y', side = 'right', color = '#ef4444'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9'),
+    hovermode = 'x unified',
+    legend = list(orientation = 'h', y = -0.2)
+  )
+
+p
+```
+
+<div class="card">
+**Key Findings:**
+
+- **Best Performance Hour:** `r hourly_stats$hour[which.min(hourly_stats$avg_response_time)]`:00 (lowest response time: `r round(min(hourly_stats$avg_response_time), 1)` ms)
+- **Worst Performance Hour:** `r hourly_stats$hour[which.max(hourly_stats$avg_response_time)]`:00 (highest response time: `r round(max(hourly_stats$avg_response_time), 1)` ms)
+- **Peak Error Hour:** `r hourly_stats$hour[which.max(hourly_stats$avg_error_rate)]`:00 (error rate: `r sprintf("%.2f%%", max(hourly_stats$avg_error_rate))`)
+</div>
+
+---
+
+## Anomaly Detection
+
+```{r anomalies, echo=FALSE}
+# Get anomalous operations
+anomalies <- performance_data %>%
+  filter(is_anomaly) %>%
+  select(timestamp, operation_id, response_time_ms, error_rate, cpu_usage) %>%
+  arrange(desc(response_time_ms)) %>%
+  head(20)
+
+# Scatter plot of response time vs throughput
+p <- plot_ly(performance_data, x = ~throughput_ops, y = ~response_time_ms,
+             color = ~is_anomaly, colors = c('#22c55e', '#ef4444'),
+             type = 'scatter', mode = 'markers',
+             marker = list(size = 8, opacity = 0.6),
+             text = ~paste('Operation:', operation_id,
+                          '<br>Response Time:', round(response_time_ms, 1), 'ms',
+                          '<br>Throughput:', throughput_ops, 'ops/sec',
+                          '<br>Error Rate:', sprintf("%.2f%%", error_rate * 100)),
+             hoverinfo = 'text') %>%
+  layout(
+    title = "Response Time vs Throughput (Anomalies Highlighted)",
+    xaxis = list(title = "Throughput (ops/sec)", color = '#f1f5f9'),
+    yaxis = list(title = "Response Time (ms)", type = 'log', color = '#f1f5f9'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9'),
+    showlegend = TRUE
+  )
+
+p
+```
+
+### Top 20 Anomalous Operations
+
+```{r anomaly_table, echo=FALSE}
+anomalies %>%
+  mutate(
+    response_time_ms = round(response_time_ms, 1),
+    error_rate = sprintf("%.2f%%", error_rate * 100),
+    cpu_usage = sprintf("%.1f%%", cpu_usage * 100)
+  ) %>%
+  datatable(
+    options = list(
+      pageLength = 10,
+      dom = 'Bfrtip',
+      scrollX = TRUE
+    ),
+    rownames = FALSE,
+    class = 'cell-border stripe',
+    caption = 'Operations with anomalous behavior (sorted by response time)'
+  )
+```
+
+---
+
+## Statistical Summary
+
+```{r statistical_summary, echo=FALSE}
+# Comprehensive summary statistics
+summary_stats <- performance_data %>%
+  summarise(
+    Metric = c("Response Time (ms)", "Throughput (ops/sec)", "Error Rate (%)",
+               "CPU Usage (%)", "Memory (MB)", "Concurrent Users"),
+    Mean = c(mean(response_time_ms), mean(throughput_ops), mean(error_rate) * 100,
+             mean(cpu_usage) * 100, mean(memory_usage_mb), mean(concurrent_users)),
+    Median = c(median(response_time_ms), median(throughput_ops), median(error_rate) * 100,
+               median(cpu_usage) * 100, median(memory_usage_mb), median(concurrent_users)),
+    SD = c(sd(response_time_ms), sd(throughput_ops), sd(error_rate) * 100,
+           sd(cpu_usage) * 100, sd(memory_usage_mb), sd(concurrent_users)),
+    Min = c(min(response_time_ms), min(throughput_ops), min(error_rate) * 100,
+            min(cpu_usage) * 100, min(memory_usage_mb), min(concurrent_users)),
+    Max = c(max(response_time_ms), max(throughput_ops), max(error_rate) * 100,
+            max(cpu_usage) * 100, max(memory_usage_mb), max(concurrent_users))
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 2)))
+
+kable(summary_stats, align = 'lcccccc', caption = "Comprehensive Performance Statistics")
+```
+
+---
+
+## Correlation Analysis
+
+```{r correlation, echo=FALSE}
+# Correlation matrix
+numeric_cols <- c("response_time_ms", "throughput_ops", "error_rate",
+                  "cpu_usage", "memory_usage_mb", "concurrent_users")
+cor_matrix <- cor(performance_data[, numeric_cols])
+
+# Interactive heatmap
+plot_ly(
+  z = cor_matrix,
+  x = colnames(cor_matrix),
+  y = colnames(cor_matrix),
+  type = "heatmap",
+  colorscale = list(c(0, "#ef4444"), c(0.5, "#fbbf24"), c(1, "#22c55e")),
+  zmin = -1, zmax = 1,
+  text = round(cor_matrix, 3),
+  hovertemplate = '%{x} vs %{y}<br>Correlation: %{z:.3f}<extra></extra>'
+) %>%
+  layout(
+    title = "Performance Metrics Correlation Matrix",
+    xaxis = list(title = "", color = '#f1f5f9'),
+    yaxis = list(title = "", color = '#f1f5f9'),
+    plot_bgcolor = '#1e293b',
+    paper_bgcolor = '#0f172a',
+    font = list(color = '#f1f5f9')
+  )
+```
+
+<div class="card">
+**Key Correlations:**
+
+```{r key_correlations, echo=FALSE, results='asis'}
+# Find strongest positive and negative correlations
+cor_pairs <- which(upper.tri(cor_matrix), arr.ind = TRUE)
+cor_values <- cor_matrix[cor_pairs]
+cor_df <- data.frame(
+  var1 = rownames(cor_matrix)[cor_pairs[,1]],
+  var2 = colnames(cor_matrix)[cor_pairs[,2]],
+  correlation = cor_values
+) %>%
+  arrange(desc(abs(correlation))) %>%
+  head(5)
+
+for(i in 1:nrow(cor_df)) {
+  cat(paste0("- **", cor_df$var1[i], "** vs **", cor_df$var2[i], "**: ",
+             sprintf("%.3f", cor_df$correlation[i]), "\n"))
+}
+```
+</div>
+
+---
+
+## Recommendations
+
+<div class="card">
+
+### 🎯 Performance Optimization Opportunities
+
+1. **Response Time**: Average response time is `r round(avg_response_time, 1)`ms.
+   - Investigate operations exceeding `r round(quantile(performance_data$response_time_ms, 0.95), 1)`ms (95th percentile)
+   - Consider caching strategies for frequently accessed operations
+
+2. **Error Rate**: Current error rate of `r sprintf("%.2f%%", avg_error_rate)`.
+   - `r if(avg_error_rate > 2) "⚠️ ERROR RATE ABOVE 2% - IMMEDIATE ACTION REQUIRED" else "✅ Error rate within acceptable limits"`
+   - Review error patterns during peak hours
+
+3. **Resource Utilization**:
+   - CPU usage averaging `r sprintf("%.1f%%", avg_cpu)`
+   - Memory usage averaging `r round(mean(performance_data$memory_usage_mb), 0)`MB
+   - `r if(avg_cpu > 75) "⚠️ High CPU utilization - consider scaling" else "✅ CPU utilization healthy"`
+
+4. **Anomalies**: `r anomaly_count` anomalous operations detected (`r sprintf("%.1f%%", anomaly_pct)`)
+   - Investigate root causes of performance degradation
+   - Implement alerting for similar patterns
+
+</div>
+
+---
+
+## About This Report
+
+<div class="card">
+**Report Details:**
+
+- **Generated:** `r Sys.time()`
+- **Analysis Period:** `r format(min(performance_data$timestamp), "%Y-%m-%d")` to `r format(max(performance_data$timestamp), "%Y-%m-%d")`
+- **Total Operations:** `r format(n_records, big.mark=",")`
+- **Anomalies Detected:** `r anomaly_count` (`r sprintf("%.1f%%", anomaly_pct)`)
+- **Author:** Kamil Nazaruk
+- **GitHub:** [r-performance-analysis](https://github.com/KamilNaz/r-performance-analysis)
+- **Portfolio:** [kamilnaz.github.io](https://kamilnaz.github.io)
+
+This report was generated using R Markdown with interactive Plotly visualizations. The analysis uses sample data for demonstration purposes. For production use, replace the sample data generation with your actual performance metrics.
+</div>
+
+```{r session_info, echo=FALSE}
+cat("\n### R Session Information\n\n")
+sessionInfo()
+```

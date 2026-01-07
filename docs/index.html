@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R Performance Analysis Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f1f5f9;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            background: #1e293b;
+            border-radius: 20px;
+            padding: 60px 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid #334155;
+            text-align: center;
+        }
+
+        h1 {
+            color: #38bdf8;
+            font-size: 3em;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: #94a3b8;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+
+        .status {
+            background: linear-gradient(135deg, #334155 0%, #475569 100%);
+            border-left: 4px solid #38bdf8;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+
+        .status-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .status-text {
+            font-size: 1.1em;
+            line-height: 1.8;
+            color: #cbd5e1;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 30px;
+            background: #38bdf8;
+            color: #0f172a;
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .btn:hover {
+            background: #0ea5e9;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(56, 189, 248, 0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: #38bdf8;
+            border: 2px solid #38bdf8;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(56, 189, 248, 0.1);
+        }
+
+        .info-box {
+            background: #0f172a;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 30px 0;
+            text-align: left;
+        }
+
+        .info-box h3 {
+            color: #38bdf8;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-box li {
+            padding: 8px 0;
+            color: #cbd5e1;
+            padding-left: 25px;
+            position: relative;
+        }
+
+        .info-box li:before {
+            content: "📊";
+            position: absolute;
+            left: 0;
+        }
+
+        .footer {
+            margin-top: 40px;
+            color: #64748b;
+            font-size: 0.9em;
+        }
+
+        .footer a {
+            color: #38bdf8;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 R Performance Analysis</h1>
+        <p class="subtitle">Interactive Performance Monitoring Dashboard</p>
+
+        <div class="status">
+            <div class="status-icon">🔄</div>
+            <div class="status-text">
+                <strong>Interactive report is being generated...</strong><br><br>
+                The full interactive HTML dashboard will be available shortly after the first GitHub Actions workflow completes.
+                This automated process renders the RMarkdown report with live visualizations.
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>📈 Report Features:</h3>
+            <ul>
+                <li>Real-time performance metrics and trends</li>
+                <li>Interactive Plotly visualizations</li>
+                <li>Response time and throughput analysis</li>
+                <li>Resource utilization monitoring</li>
+                <li>Anomaly detection and highlighting</li>
+                <li>Statistical correlation analysis</li>
+                <li>Hourly performance patterns</li>
+                <li>Actionable optimization recommendations</li>
+            </ul>
+        </div>
+
+        <div class="info-box">
+            <h3>🚀 Quick Start (Local):</h3>
+            <ul>
+                <li>Clone the repository</li>
+                <li>Install R packages: <code>install.packages(c('rmarkdown', 'ggplot2', 'dplyr', 'plotly', 'DT', 'knitr'))</code></li>
+                <li>Run: <code>Rscript render_report.R</code></li>
+                <li>Open: <code>docs/index.html</code> in your browser</li>
+            </ul>
+        </div>
+
+        <div class="button-group">
+            <a href="https://github.com/KamilNaz/r-performance-analysis" class="btn" target="_blank">
+                <span>📂</span>
+                <span>View on GitHub</span>
+            </a>
+            <a href="https://github.com/KamilNaz/r-performance-analysis#quick-start" class="btn btn-secondary" target="_blank">
+                <span>📖</span>
+                <span>Documentation</span>
+            </a>
+        </div>
+
+        <div class="footer">
+            Built with ❤️ by <a href="https://kamilnaz.github.io" target="_blank">Kamil Nazaruk</a><br>
+            Powered by R, RMarkdown & Plotly
+        </div>
+    </div>
+</body>
+</html>
